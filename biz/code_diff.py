@@ -40,37 +40,8 @@ class DiffHtmlFormatter(HtmlFormatter):
         self.diffs = diffs
         super(DiffHtmlFormatter, self).__init__(*args, **kwargs)
 
-    def wrap(self, source, outfile):
+    def wrap(self, source):
         return self._wrap_code(source)
-
-    def getDiffLineNos(self):
-        retlinenos = []
-        for idx, ((left_no, left_line), (right_no, right_line), change) in enumerate(self.diffs):
-            no = None
-            if self.isLeft:
-                if change:
-                    if isinstance(left_no, int) and isinstance(right_no, int):
-                        no = f'<span class="lineno_q lineno_leftchange"><a id="l{left_no}" href="#l{left_no}">{left_no}</a></span>'
-                    elif isinstance(left_no, int) and not isinstance(right_no, int):
-                        no = f'<span class="lineno_q lineno_leftdel"><a id="l{left_no}" href="#l{left_no}">{left_no}</a></span>'
-                    elif not isinstance(left_no, int) and isinstance(right_no, int):
-                        no = '<span class="lineno_q lineno_leftadd">  </span>'
-                else:
-                    no = f'<span class="lineno_q"><a id="l{left_no}" href="#l{left_no}">{left_no}</a></span>'
-            else:
-                if change:
-                    if isinstance(left_no, int) and isinstance(right_no, int):
-                        no = f'<span class="lineno_q lineno_rightchange"><a id="r{right_no}" href="#r{right_no}">{right_no}</a></span>'
-                    elif isinstance(left_no, int) and not isinstance(right_no, int):
-                        no = '<span class="lineno_q lineno_rightdel">  </span>'
-                    elif not isinstance(left_no, int) and isinstance(right_no, int):
-                        no = f'<span class="lineno_q lineno_rightadd"><a id="r{right_no}" href="#r{right_no}">{right_no}</a></span>'
-                else:
-                    no = f'<span class="lineno_q"><a id="r{right_no}" href="#r{right_no}">{right_no}</a></span>'
-
-            retlinenos.append(no)
-
-        return retlinenos
 
     def _wrap_code(self, source):
         source = list(source)
@@ -145,7 +116,7 @@ class DiffHtmlFormatter(HtmlFormatter):
         nocls = self.noclasses
 
         lines = []
-        for i in self.getDiffLineNos():
+        for i in self.__get_diff_line_nos():
             lines.append('%s' % (i,))
 
         ls = ''.join(lines)
@@ -166,6 +137,35 @@ class DiffHtmlFormatter(HtmlFormatter):
         yield 0, dummyoutfile.getvalue()
         yield 0, '</td></tr></table>'
 
+    def __get_diff_line_nos(self):
+        retlinenos = []
+        for idx, ((left_no, left_line), (right_no, right_line), change) in enumerate(self.diffs):
+            no = None
+            if self.isLeft:
+                if change:
+                    if isinstance(left_no, int) and isinstance(right_no, int):
+                        no = f'<span class="lineno_q lineno_leftchange"><a id="l{left_no}" href="#l{left_no}">{left_no}</a></span>'
+                    elif isinstance(left_no, int) and not isinstance(right_no, int):
+                        no = f'<span class="lineno_q lineno_leftdel"><a id="l{left_no}" href="#l{left_no}">{left_no}</a></span>'
+                    elif not isinstance(left_no, int) and isinstance(right_no, int):
+                        no = '<span class="lineno_q lineno_leftadd">  </span>'
+                else:
+                    no = f'<span class="lineno_q"><a id="l{left_no}" href="#l{left_no}">{left_no}</a></span>'
+            else:
+                if change:
+                    if isinstance(left_no, int) and isinstance(right_no, int):
+                        no = f'<span class="lineno_q lineno_rightchange"><a id="r{right_no}" href="#r{right_no}">{right_no}</a></span>'
+                    elif isinstance(left_no, int) and not isinstance(right_no, int):
+                        no = '<span class="lineno_q lineno_rightdel">  </span>'
+                    elif not isinstance(left_no, int) and isinstance(right_no, int):
+                        no = f'<span class="lineno_q lineno_rightadd"><a id="r{right_no}" href="#r{right_no}">{right_no}</a></span>'
+                else:
+                    no = f'<span class="lineno_q"><a id="r{right_no}" href="#r{right_no}">{right_no}</a></span>'
+
+            retlinenos.append(no)
+
+        return retlinenos
+        
 class CodeDiff(object):
     """
     Manages a pair of source files and generates a single html diff page comparing
@@ -182,7 +182,8 @@ class CodeDiff(object):
             except Exception as e:
                 print("Problem reading file %s" % fromfile)
                 print(e)
-                sys.exit(1)
+                #sys.exit(1)
+                self.fromlines = []
         else:
             self.fromlines = [n + "\n" for n in fromtxt.split("\n")]
         self.leftcode = "".join(self.fromlines)
@@ -195,7 +196,8 @@ class CodeDiff(object):
             except Exception as e:
                 print("Problem reading file %s" % tofile)
                 print(e)
-                sys.exit(1)
+                #sys.exit(1)
+                self.tolines = []                
         else:
             self.tolines = [n + "\n" for n in totxt.split("\n")]
         self.rightcode = "".join(self.tolines)
@@ -222,10 +224,10 @@ class CodeDiff(object):
         else:
             context_lines = None
 
-        diffs = difflib._mdiff(self.fromlines, self.tolines, context_lines,
-                               linejunk=None, charjunk=difflib.IS_CHARACTER_JUNK)
+        diffs = difflib._mdiff(self.fromlines, self.tolines, context_lines, 
+                               linejunk=difflib.IS_LINE_JUNK, charjunk=difflib.IS_CHARACTER_JUNK)
         return list(diffs)
-
+    
     def format(self):
         self.diffs = self.getDiffDetails(self.fromfile, self.tofile)
 
@@ -241,9 +243,10 @@ class CodeDiff(object):
                                      style='vs')
 
             try:
-                self.lexer = guess_lexer_for_filename(self.filename, code)
+                self.lexer = guess_lexer_for_filename(self.filename, code, stripnl=False)
 
             except pygments.util.ClassNotFound:
+                print("guess lexer failed.")
                 self.lexer = DefaultLexer()
 
             formatted = pygments.highlight(code, self.lexer, inst)
