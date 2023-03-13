@@ -11,6 +11,12 @@ def home():
     modified_file = request.args.get('modified')
     assert original_file and modified_file
 
-    code_contents = get_diff_code_contents(original_file, modified_file)
-    
-    return render_template('home.html', original_code=code_contents[0], modified_code=code_contents[1])
+    original_macro_file_path = None
+    modified_macro_file_path = "sample/modified/macro.h"
+
+    original_code, modified_code = get_diff_code_contents(original_file, modified_file,
+                                           original_macro_file_path, modified_macro_file_path)
+
+    title = f"diff: {original_file} => {modified_file}"
+    return render_template('home.html', title=title,
+                           original_code=original_code, modified_code=modified_code)
